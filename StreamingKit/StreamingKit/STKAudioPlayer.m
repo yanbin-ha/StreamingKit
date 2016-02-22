@@ -72,16 +72,19 @@ static void PopulateOptionsWithDefault(STKAudioPlayerOptions* options)
 {
     if (options->bufferSizeInSeconds == 0)
     {
+        /* 10s的缓冲大小 */
         options->bufferSizeInSeconds = STK_DEFAULT_PCM_BUFFER_SIZE_IN_SECONDS;
     }
     
     if (options->readBufferSize == 0)
     {
+        /* 默认的读取缓冲区大小为64KB */
         options->readBufferSize = STK_DEFAULT_READ_BUFFER_SIZE;
     }
     
     if (options->secondsRequiredToStartPlaying == 0)
     {
+        /* 默认从1s的地方开始播放 */
         options->secondsRequiredToStartPlaying = MIN(STK_DEFAULT_SECONDS_REQUIRED_TO_START_PLAYING, options->bufferSizeInSeconds);
     }
     
@@ -761,18 +764,25 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
         
 		if (![self audioGraphIsRunning])
 		{
+            /* 开启后台线程 */
 			[self startSystemBackgroundTask];
 		}
         
+        /* 清空bufferingQueue 和 upcomingQueue */
+        /* 并通知代理对象，该动作的发生 */
         [self clearQueue];
-
-        [upcomingQueue enqueue:[[STKQueueEntry alloc] initWithDataSource:dataSourceIn andQueueItemId:queueItemId]];
+        
+        /* 创建队列项 */
+        STKQueueEntry * stkQE = [[STKQueueEntry alloc] initWithDataSource:dataSourceIn andQueueItemId:queueItemId];
+        
+        /* 将数据源添加到播放队列中 */
+        [upcomingQueue enqueue:stkQE]; // 将stkQE插入到数组upcomingQueue的第一个位置之前
         
         self.internalState = STKAudioPlayerInternalStatePendingNext;
     }
     pthread_mutex_unlock(&playerMutex);
     
-    [self wakeupPlaybackThread];
+    [self wakeupPlaybackThread]; // 入队成功后唤醒播放线程
 }
 
 -(void) queue:(NSString*)urlString
@@ -1056,7 +1066,7 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
 
 	if (waiting)
 	{
-		pthread_cond_signal(&playerThreadReadyCondition);
+		pthread_cond_signal(&playerThreadReadyCondition); // 发送通知：播放线程已经就绪，但是谁在监听呢？
 	}
 
 	pthread_mutex_unlock(&playerMutex);
@@ -1117,20 +1127,24 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
 
 -(void) setCurrentlyReadingEntry:(STKQueueEntry*)entry andStartPlaying:(BOOL)startPlaying clearQueue:(BOOL)clearQueue
 {
+    // startPlaying = YES && clearQueue = YES
     LOGINFO(([entry description]));
 
     if (startPlaying)
     {
+        // buffer_size = frame_count * frame_size_bytes;
         memset(&pcmAudioBuffer->mData[0], 0, pcmBufferTotalFrameCount * pcmBufferFrameSizeInBytes);
     }
     
+    // 如果打开了视频播放stream，那么关闭它s
+    // 其实不应该在这个位置出现，这个属于初始化代码
     if (audioFileStream)
     {
         AudioFileStreamClose(audioFileStream);
-        
         audioFileStream = 0;
     }
     
+    // 关闭当前的音频输入源
     if (currentlyReadingEntry)
     {
         currentlyReadingEntry.dataSource.delegate = nil;
@@ -1138,10 +1152,12 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
         [currentlyReadingEntry.dataSource close];
     }
     
+    // 这里才把这个entry设置为currentlyReadingEntry
     OSSpinLockLock(&currentEntryReferencesLock);
     currentlyReadingEntry = entry;
     OSSpinLockUnlock(&currentEntryReferencesLock);
     
+    // 为当前的readingEntry设置代理，并添加事件监听
     currentlyReadingEntry.dataSource.delegate = self;
     [currentlyReadingEntry.dataSource registerForEvents:[NSRunLoop currentRunLoop]];
     [currentlyReadingEntry.dataSource seekToOffset:0];
@@ -1324,11 +1340,11 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
             
             return YES;
         }
-        else if (self.internalState == STKAudioPlayerInternalStatePendingNext)
+        else if (self.internalState == STKAudioPlayerInternalStatePendingNext) // 刚出初始化之后，走这个分支
         {
-            STKQueueEntry* entry = [upcomingQueue dequeue];
+            STKQueueEntry* entry = [upcomingQueue dequeue]; // 取出upcomingQueue数组的最后一个元素,并删除之
             
-            self.internalState = STKAudioPlayerInternalStateWaitingForData;
+            self.internalState = STKAudioPlayerInternalStateWaitingForData; // 更改内部状态
             
             [self setCurrentlyReadingEntry:entry andStartPlaying:YES];
             [self resetPcmBuffers];
@@ -1745,9 +1761,9 @@ static void AudioFileStreamPacketsProc(void* clientData, UInt32 numberBytes, UIn
     
     self->pcmBufferFrameStartIndex = 0;
     self->pcmBufferUsedFrameCount = 0;
-	self->peakPowerDb[0] = STK_DBMIN;
+	self->peakPowerDb[0] = STK_DBMIN; // peak power 最大功率
 	self->peakPowerDb[1] = STK_DBMIN;
-	self->averagePowerDb[0] = STK_DBMIN;
+	self->averagePowerDb[0] = STK_DBMIN; // average power 平均功率
 	self->averagePowerDb[1] = STK_DBMIN;
     
     OSSpinLockUnlock(&pcmBufferSpinLock);

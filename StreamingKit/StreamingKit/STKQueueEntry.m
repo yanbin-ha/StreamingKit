@@ -18,12 +18,12 @@
 {
     if (self = [super init])
     {
-        self->spinLock = OS_SPINLOCK_INIT;
+        self->spinLock = OS_SPINLOCK_INIT; // 初始化自旋锁
         
         self.dataSource = dataSourceIn;
         self.queueItemId = queueItemIdIn;
         self->lastFrameQueued = -1;
-        self->durationHint = dataSourceIn.durationHint;
+        self->durationHint = dataSourceIn.durationHint; // 时长提示
     }
     
     return self;

@@ -418,7 +418,7 @@
 {
     NSRunLoop* savedEventsRunLoop = eventsRunLoop;
     
-    [self close];
+    [self close]; // 关闭自己?
     
     eventsRunLoop = savedEventsRunLoop;
 	
@@ -430,6 +430,7 @@
     
     self->isInErrorState = NO;
     
+    // 不支持seek 并且 offset和相对位置不同
     if (!self->supportsSeek && offset != self->relativePosition)
     {
         return;
@@ -494,6 +495,7 @@
     {
 		if (localRequestSerialNumber != self->requestSerialNumber)
 		{
+            // 后一个请求，会使得前一个请求中断
 			return;
 		}
 	
@@ -504,8 +506,10 @@
             return;
         }
 
+        // 创建一个get方法的http请求
         CFHTTPMessageRef message = CFHTTPMessageCreateRequest(NULL, (CFStringRef)@"GET", (__bridge CFURLRef)self->currentUrl, kCFHTTPVersion1_1);
 
+        // 如果支持seek的话，设置http头的range调整内容获取的范围
         if (seekStart > 0 && supportsSeek)
         {
             CFHTTPMessageSetHeaderFieldValue(message, CFSTR("Range"), (__bridge CFStringRef)[NSString stringWithFormat:@"bytes=%lld-", seekStart]);
@@ -523,6 +527,7 @@
         CFHTTPMessageSetHeaderFieldValue(message, CFSTR("Accept"), CFSTR("*/*"));
         CFHTTPMessageSetHeaderFieldValue(message, CFSTR("Ice-MetaData"), CFSTR("0"));
 
+        // 以http来创建输入流
         stream = CFReadStreamCreateForHTTPRequest(NULL, message);
 
         if (stream == nil)
@@ -536,6 +541,7 @@
  
         CFReadStreamSetProperty(stream, (__bridge CFStringRef)NSStreamNetworkServiceTypeBackground, (__bridge CFStringRef)NSStreamNetworkServiceTypeBackground);
 
+        // 设置http为自动重定向
         if (!CFReadStreamSetProperty(stream, kCFStreamPropertyHTTPShouldAutoredirect, kCFBooleanTrue))
         {
             CFRelease(message);
@@ -553,6 +559,7 @@
         // SSL support
         if ([self->currentUrl.scheme caseInsensitiveCompare:@"https"] == NSOrderedSame)
         {
+            // Negotiated协商
             NSDictionary* sslSettings = [NSDictionary dictionaryWithObjectsAndKeys:
             (NSString*)kCFStreamSocketSecurityLevelNegotiatedSSL, kCFStreamSSLLevel,
             [NSNumber numberWithBool:NO], kCFStreamSSLValidatesCertificateChain,
@@ -562,7 +569,7 @@
             CFReadStreamSetProperty(stream, kCFStreamPropertySSLSettings, (__bridge CFTypeRef)sslSettings);
         }
 
-        [self reregisterForEvents];
+        [self reregisterForEvents]; // 当有数据回来的时候，会回调其中注册的函数
         
 		self->httpStatusCode = 0;
 		

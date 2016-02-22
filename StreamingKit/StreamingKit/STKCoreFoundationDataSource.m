@@ -40,18 +40,18 @@ static void ReadStreamCallbackProc(CFReadStreamRef stream, CFStreamEventType eve
     
     switch (eventType)
     {
-        case kCFStreamEventErrorOccurred:
+        case kCFStreamEventErrorOccurred: // 发生错误
         {
             [datasource errorOccured];
             break;
         }
-        case kCFStreamEventEndEncountered:
+        case kCFStreamEventEndEncountered: // 数据读取结束
             [datasource eof];
             break;
-        case kCFStreamEventHasBytesAvailable:
+        case kCFStreamEventHasBytesAvailable: // 读到有效数据
             [datasource dataAvailable];
             break;
-        case kCFStreamEventOpenCompleted:
+        case kCFStreamEventOpenCompleted: // 成功打开
             [datasource openCompleted];
             break;
         default:
@@ -135,7 +135,11 @@ static void ReadStreamCallbackProc(CFReadStreamRef stream, CFStreamEventType eve
 {
     if (stream)
     {
+        // 1,删除时间监听回调
+        // 有字节可以读 | 发生错误 | 到达结尾处
         CFReadStreamSetClient(stream, kCFStreamEventHasBytesAvailable | kCFStreamEventErrorOccurred | kCFStreamEventEndEncountered, NULL, NULL);
+        
+        // 2,从runloop中移除stream
         CFReadStreamUnscheduleFromRunLoop(stream, [eventsRunLoop getCFRunLoop], kCFRunLoopCommonModes);
     }
 }
